@@ -1,25 +1,26 @@
-# Browser PDF Editor V5
+# Browser PDF Editor V6
 
-A browser-only PDF editor prototype for GitHub/Vercel. PDFs and signature images are processed in the browser.
+V6 changes existing-text replacement so it no longer exports a white rectangle over the original field. It uses MuPDF in WebAssembly to remove text content only while preserving line art and images, then writes the replacement text back into the PDF.
 
-## V5 changes
-- Existing printed PDF text is no longer shown as a highlighted text layer. Invisible hover targets let you click a detected line and replace it inline.
-- Native AcroForm text fields, checkboxes, radio buttons and dropdowns are interactive when present in the PDF.
-- Add text anywhere for printed empty boxes.
-- Add check/X marks, whiteouts, rectangles, signatures/images, drag/resize, presets, zoom, pages and export.
+## Features
+- Open arbitrary PDFs in the browser
+- Click detected existing text and replace it
+- Original box borders/background graphics are preserved during text replacement
+- Native PDF form text fields, checkboxes, radio buttons and dropdowns when present
+- Add text, whiteout, rectangles and marks
+- Upload, drag and resize signature images
+- Persistent signature presets stored locally in IndexedDB
+- Multi-page navigation and zoom
+- Export edited PDF
 
-## Run / deploy
-`npm install` then `npm run dev`, or import this folder/repository into Vercel. Vite build command: `npm run build`; output directory: `dist`.
+## Deploy to Vercel
+1. Upload this folder to a GitHub repository.
+2. Import the repository in Vercel.
+3. Framework preset: Vite.
+4. Build command: `npm run build`.
+5. Output directory: `dist`.
 
-## Important PDF limitation
-PDFs are page-description files, not Word documents. For non-form printed text, V5 detects text coordinates, covers the original area, and writes the replacement on export. Scanned/image-only PDFs do not contain editable text unless OCR is added. Empty printed boxes are not semantic form fields, so use Add text or Check/X inside them.
+## Important
+This is a prototype. Test exported files carefully. Existing-text replacement is strongest on digitally generated PDFs with extractable text. Some PDFs use unusual encodings, clipping, vectorized letters, or scanned images and cannot be edited as normal text.
 
-For real patient data, obtain your organisation's information-governance/IT approval before clinical use.
-
-
-## V5 changes
-- Existing-text editor grows horizontally as you type; Shift+Enter creates a new line and grows vertically.
-- Edit border is only shown while actively typing.
-- Saved signatures are stored as the actual image data in browser IndexedDB and persist across visits on that browser/device.
-- Signature presets can be renamed and deleted.
-- Signature resizing preserves image aspect ratio.
+PDF and signature processing is client-side. Signature presets are stored in that browser profile/device. Obtain organizational approval before using patient-identifiable documents.
