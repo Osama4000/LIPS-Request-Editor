@@ -2,10 +2,11 @@ import './style.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import * as mupdf from 'mupdf';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 const app=document.querySelector('#app');
-app.innerHTML=`<header><b>PDF Editor V5</b><span class="sub">Auto-growing text • persistent signature library • browser-only</span><label class="open">Open PDF<input id="pdfInput" type="file" accept="application/pdf" hidden></label><button id="save" disabled>Save PDF</button></header>
+app.innerHTML=`<header><b>PDF Editor V6</b><span class="sub">Direct text removal • preserved boxes/background • signature library</span><label class="open">Open PDF<input id="pdfInput" type="file" accept="application/pdf" hidden></label><button id="save" disabled>Save PDF</button></header>
 <div class="shell"><aside>
 <button data-tool="edit" class="active">↖ Edit existing</button><button data-tool="text">T Add text</button><button data-tool="whiteout">▭ Whiteout</button><button data-tool="rect">□ Box</button><button data-tool="check">✓ Check / X</button>
 <button id="addImage">▧ Signature / image</button><input id="imageInput" type="file" accept="image/png,image/jpeg" hidden>
@@ -53,5 +54,45 @@ async function sigDelete(id){const db=await sigDB();return new Promise((resolve,
 async function showPresets(){const p=await sigAll();$('#presets').innerHTML=p.length?p.map(x=>`<div class="preset"><button data-p="${x.id}">${esc(x.name)}</button><button data-r="${x.id}" title="Rename">✎</button><button data-d="${x.id}" title="Delete">×</button></div>`).join(''):'<small>No saved presets</small>';document.querySelectorAll('[data-p]').forEach(b=>b.onclick=async()=>{const x=(await sigAll()).find(v=>v.id===b.dataset.p);if(!x)return;const img=new Image();img.onload=()=>{let w=150,h=w*img.height/img.width;if(h>110){h=110;w=h*img.width/img.height}addObj('image',60,60,{src:x.src,w,h,aspect:img.width/img.height})};img.src=x.src});document.querySelectorAll('[data-r]').forEach(b=>b.onclick=async()=>{const x=(await sigAll()).find(v=>v.id===b.dataset.r);if(!x)return;const name=prompt('Signature name:',x.name);if(name?.trim()){x.name=name.trim();await sigPut(x);showPresets()}});document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(confirm('Delete this saved signature?')){await sigDelete(b.dataset.d);showPresets()}})}
 $('#savePreset').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='image/png,image/jpeg';i.onchange=async()=>{if(!i.files[0])return;const name=prompt('Signature name:',i.files[0].name.replace(/\.[^.]+$/,''));if(!name?.trim())return;const src=await dataURL(i.files[0]);await sigPut({id:crypto.randomUUID(),name:name.trim(),src,createdAt:Date.now()});await showPresets()};i.click()};showPresets();
 async function applyFields(doc){let form;try{form=doc.getForm()}catch{return}for(const [key,val] of formEdits){const name=key.slice(key.indexOf(':')+1);let f;try{f=form.getField(name)}catch{continue}try{const n=f.constructor.name;if(n.includes('CheckBox'))val?f.check():f.uncheck();else if(n.includes('RadioGroup'))f.select(String(val));else if(n.includes('Dropdown')||n.includes('OptionList'))f.select(String(val));else if(n.includes('TextField'))f.setText(String(val))}catch(e){console.warn(name,e)}}try{form.updateFieldAppearances(await doc.embedFont(StandardFonts.Helvetica))}catch{}}
-$('#save').onclick=async()=>{if(!pdfBytes)return;const doc=await PDFDocument.load(pdfBytes),font=await doc.embedFont(StandardFonts.Helvetica);await applyFields(doc);for(const o of objects){const p=doc.getPage(o.page-1),H=p.getHeight();if(o.type==='whiteout')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,color:rgb(1,1,1)});if(o.type==='replaceText')p.drawRectangle({x:o.x,y:H-o.y-(o.sourceH||o.h),width:o.sourceW||o.w,height:o.sourceH||o.h,color:rgb(1,1,1)});if(o.type==='rect')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,borderColor:rgb(0,0,0),borderWidth:1});if(o.type==='text'||o.type==='replaceText')p.drawText(o.text||'',{x:o.x,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0),maxWidth:o.w,lineHeight:o.fontSize*1.1});if(o.type==='check')p.drawText('X',{x:o.x+3,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0)});if(o.type==='image'){const bytes=await fetch(o.src).then(r=>r.arrayBuffer());let im;try{im=await doc.embedPng(bytes)}catch{im=await doc.embedJpg(bytes)}p.drawImage(im,{x:o.x,y:H-o.y-o.h,width:o.w,height:o.h})}}const out=await doc.save(),blob=new Blob([out],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='edited.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+async function removeOriginalTextContent(inputBytes){
+  // MuPDF redaction can remove ONLY text while explicitly preserving images and line art.
+  // This is the key difference from V5: no white rectangle is painted over the field.
+  const replacements=objects.filter(o=>o.type==='replaceText');
+  if(!replacements.length)return inputBytes.slice();
+  let mdoc;
+  try{
+    mdoc=mupdf.Document.openDocument(inputBytes.slice(), 'application/pdf');
+    const pdfDoc=mdoc.asPDF();
+    const byPage=new Map();
+    for(const o of replacements){if(!byPage.has(o.page))byPage.set(o.page,[]);byPage.get(o.page).push(o)}
+    for(const [pageNo,items] of byPage){
+      const page=pdfDoc.loadPage(pageNo-1);
+      for(const o of items){
+        // Tight rectangle around the original detected text only. MuPDF coordinates use
+        // a top-left origin, matching the editor coordinates.
+        const padX=Math.min(0.8, Math.max(0.15,(o.fontSize||10)*0.035));
+        const padY=Math.min(0.5, Math.max(0.10,(o.fontSize||10)*0.025));
+        const x0=Math.max(0,o.x-padX), y0=Math.max(0,o.y-padY);
+        const x1=o.x+(o.sourceW||o.w)+padX, y1=o.y+(o.sourceH||o.h)+padY;
+        const red=page.createAnnotation('Redact');
+        red.setRect([x0,y0,x1,y1]);
+        red.update();
+      }
+      // Preserve images and line art (box borders, grey fills, blue rules); remove text only.
+      page.applyRedactions(
+        false,
+        mupdf.PDFPage.REDACT_IMAGE_NONE,
+        mupdf.PDFPage.REDACT_LINE_ART_NONE,
+        mupdf.PDFPage.REDACT_TEXT_REMOVE
+      );
+      page.destroy();
+    }
+    const out=pdfDoc.saveToBuffer('garbage,compress').asUint8Array();
+    return new Uint8Array(out);
+  }catch(err){
+    console.error('Direct text removal failed',err);
+    throw new Error('This PDF could not be edited at content level. No file was changed. '+(err?.message||err));
+  }finally{try{mdoc?.destroy()}catch{}}
+}
+$('#save').onclick=async()=>{if(!pdfBytes)return;let cleaned;try{cleaned=await removeOriginalTextContent(pdfBytes)}catch(err){alert(err.message);return}const doc=await PDFDocument.load(cleaned),font=await doc.embedFont(StandardFonts.Helvetica);await applyFields(doc);for(const o of objects){const p=doc.getPage(o.page-1),H=p.getHeight();if(o.type==='whiteout')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,color:rgb(1,1,1)});if(o.type==='rect')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,borderColor:rgb(0,0,0),borderWidth:1});if(o.type==='text'||o.type==='replaceText')p.drawText(o.text||'',{x:o.x,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0),maxWidth:o.w,lineHeight:o.fontSize*1.1});if(o.type==='check')p.drawText('X',{x:o.x+3,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0)});if(o.type==='image'){const bytes=await fetch(o.src).then(r=>r.arrayBuffer());let im;try{im=await doc.embedPng(bytes)}catch{im=await doc.embedJpg(bytes)}p.drawImage(im,{x:o.x,y:H-o.y-o.h,width:o.w,height:o.h})}}const out=await doc.save(),blob=new Blob([out],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='edited.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 window.addEventListener('keydown',e=>{if((e.key==='Delete'||e.key==='Backspace')&&selected&&!['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();$('#delete').click()}});
