@@ -1,4 +1,4 @@
-# Browser PDF Editor V6.1
+# Browser PDF Editor V6.2.1
 
 V6 changes existing-text replacement so it no longer exports a white rectangle over the original field. It uses MuPDF in WebAssembly to remove text content only while preserving line art and images, then writes the replacement text back into the PDF.
 
@@ -27,3 +27,7 @@ Vite is configured with `build.target = "esnext"` because MuPDF's browser WASM l
 This is a prototype. Test exported files carefully. Existing-text replacement is strongest on digitally generated PDFs with extractable text. Some PDFs use unusual encodings, clipping, vectorized letters, or scanned images and cannot be edited as normal text.
 
 PDF and signature processing is client-side. Signature presets are stored in that browser profile/device. Obtain organizational approval before using patient-identifiable documents.
+
+
+## V6.2 checkmark export fix
+Printed checkmarks are exported as two PDF vector strokes instead of a font glyph. This prevents a visible ✓ in the editor from becoming an X or unsupported character after saving.
