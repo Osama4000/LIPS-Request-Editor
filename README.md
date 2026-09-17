@@ -1,20 +1,26 @@
-# Browser PDF Editor
+# Browser PDF Editor V3
 
-A browser-only visual PDF editor prototype. It supports arbitrary PDFs, multiple pages, text overlays, whiteout rectangles, checkmarks, draggable/resizable PNG/JPG images, locally saved signature presets, zoom, delete/undo, and export to a new PDF.
+A client-side PDF editor intended for static hosting (GitHub Pages, Vercel, etc.).
 
-## Deploy on Vercel
-1. Create a GitHub repository and upload all files/folders in this project.
-2. Import the repository in Vercel.
-3. Framework preset: **Vite** (normally detected automatically).
+## V3 features
+- Open arbitrary PDFs in the browser
+- Detect normal PDF text and click it to create an in-place replacement
+- Detect AcroForm fields and edit text fields / dropdowns / checkboxes directly
+- Add text, whiteout rectangles, boxes, checkmarks and images
+- Drag and resize signatures/images
+- Save reusable signature presets in browser localStorage
+- Multi-page navigation and zoom
+- Export edits to a new PDF
+
+## Important limitation
+PDFs do not have a universal "edit text" model. For ordinary page text, V3 detects the rendered text and replaces it by covering the original area and writing new text at the same position. Real AcroForm fields are edited natively. Text inside scanned images is not editable by this version.
+
+## Deploy to Vercel
+1. Upload this folder to a GitHub repository.
+2. Import the repository into Vercel.
+3. Framework preset: Vite (normally auto-detected).
 4. Build command: `npm run build`
 5. Output directory: `dist`
-6. Deploy.
 
-## Local development
-`npm install` then `npm run dev`.
-
-## Privacy / clinical use
-PDF processing and signature presets are implemented in the browser; this project has no application backend. Signature presets use browser localStorage. However, hosting, browser extensions, enterprise monitoring, third-party dependencies, and organizational policy can still matter. Do not use it for live patient data until your organization's IT/information-governance team approves the deployment and workflow.
-
-## Editing model
-This is a visual editor, not a full Acrobat text-reflow engine. Existing PDF content is preserved. To replace existing text, place a Whiteout rectangle over it and add new text. Export flattens the added objects onto the original PDF.
+## Privacy
+The application itself has no backend and processes PDFs in the browser. Hosting/organizational policies still apply; obtain approval before using it with patient data.
