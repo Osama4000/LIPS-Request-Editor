@@ -6,7 +6,7 @@ import * as mupdf from 'mupdf';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 const app=document.querySelector('#app');
-app.innerHTML=`<header><b>PDF Editor V6</b><span class="sub">Direct text removal • preserved boxes/background • signature library</span><label class="open">Open PDF<input id="pdfInput" type="file" accept="application/pdf" hidden></label><button id="save" disabled>Save PDF</button></header>
+app.innerHTML=`<header><b>PDF Editor V6.2</b><span class="sub">Direct text removal • preserved boxes/background • signature library</span><label class="open">Open PDF<input id="pdfInput" type="file" accept="application/pdf" hidden></label><button id="save" disabled>Save PDF</button></header>
 <div class="shell"><aside>
 <button data-tool="edit" class="active">↖ Edit existing</button><button data-tool="text">T Add text</button><button data-tool="whiteout">▭ Whiteout</button><button data-tool="rect">□ Box</button><button data-tool="check">✓ Check / X</button>
 <button id="addImage">▧ Signature / image</button><input id="imageInput" type="file" accept="image/png,image/jpeg" hidden>
@@ -94,5 +94,12 @@ async function removeOriginalTextContent(inputBytes){
     throw new Error('This PDF could not be edited at content level. No file was changed. '+(err?.message||err));
   }finally{try{mdoc?.destroy()}catch{}}
 }
-$('#save').onclick=async()=>{if(!pdfBytes)return;let cleaned;try{cleaned=await removeOriginalTextContent(pdfBytes)}catch(err){alert(err.message);return}const doc=await PDFDocument.load(cleaned),font=await doc.embedFont(StandardFonts.Helvetica);await applyFields(doc);for(const o of objects){const p=doc.getPage(o.page-1),H=p.getHeight();if(o.type==='whiteout')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,color:rgb(1,1,1)});if(o.type==='rect')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,borderColor:rgb(0,0,0),borderWidth:1});if(o.type==='text'||o.type==='replaceText')p.drawText(o.text||'',{x:o.x,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0),maxWidth:o.w,lineHeight:o.fontSize*1.1});if(o.type==='check')p.drawText('X',{x:o.x+3,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0)});if(o.type==='image'){const bytes=await fetch(o.src).then(r=>r.arrayBuffer());let im;try{im=await doc.embedPng(bytes)}catch{im=await doc.embedJpg(bytes)}p.drawImage(im,{x:o.x,y:H-o.y-o.h,width:o.w,height:o.h})}}const out=await doc.save(),blob=new Blob([out],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='edited.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+$('#save').onclick=async()=>{if(!pdfBytes)return;let cleaned;try{cleaned=await removeOriginalTextContent(pdfBytes)}catch(err){alert(err.message);return}const doc=await PDFDocument.load(cleaned),font=await doc.embedFont(StandardFonts.Helvetica);await applyFields(doc);for(const o of objects){const p=doc.getPage(o.page-1),H=p.getHeight();if(o.type==='whiteout')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,color:rgb(1,1,1)});if(o.type==='rect')p.drawRectangle({x:o.x,y:H-o.y-o.h,width:o.w,height:o.h,borderColor:rgb(0,0,0),borderWidth:1});if(o.type==='text'||o.type==='replaceText')p.drawText(o.text||'',{x:o.x,y:H-o.y-o.fontSize,size:o.fontSize,font,color:rgb(0,0,0),maxWidth:o.w,lineHeight:o.fontSize*1.1});if(o.type==='check'){
+  // Draw a true checkmark as vector strokes. Do not use a Unicode glyph:
+  // PDF standard fonts can substitute unsupported glyphs during export.
+  const left=o.x, bottom=H-o.y-o.h, w=o.w, h=o.h;
+  const thickness=Math.max(1,Math.min(w,h)*0.085);
+  p.drawLine({start:{x:left+w*0.16,y:bottom+h*0.48},end:{x:left+w*0.39,y:bottom+h*0.24},thickness,color:rgb(0,0,0)});
+  p.drawLine({start:{x:left+w*0.39,y:bottom+h*0.24},end:{x:left+w*0.86,y:bottom+h*0.80},thickness,color:rgb(0,0,0)});
+}if(o.type==='image'){const bytes=await fetch(o.src).then(r=>r.arrayBuffer());let im;try{im=await doc.embedPng(bytes)}catch{im=await doc.embedJpg(bytes)}p.drawImage(im,{x:o.x,y:H-o.y-o.h,width:o.w,height:o.h})}}const out=await doc.save(),blob=new Blob([out],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='edited.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 window.addEventListener('keydown',e=>{if((e.key==='Delete'||e.key==='Backspace')&&selected&&!['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();$('#delete').click()}});
